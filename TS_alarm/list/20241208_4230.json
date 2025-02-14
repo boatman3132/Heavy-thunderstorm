@@ -1,0 +1,15 @@
+{
+    "id": 4230,
+    "official_id": "0901",
+    "identifier": "cwa.gov.tw_thunderstorm_20241208050250_000",
+    "sent": "2024-12-07T21:02:50Z",
+    "msg_type": "Alert",
+    "effective": "2024-12-07T21:02:00Z",
+    "onset": "2024-12-07T21:02:00Z",
+    "expires": "2024-12-07T22:00:00Z",
+    "description": "113 年 12 月 8 日 5 時 2 分 氣象署發布大雷雨即時訊息，持續時間至 6 時 0 分；請慎防劇烈降雨、雷擊，溪(河)水暴漲，坍方、落石、土石流，以及低能見度",
+    "instruction": "能見度低，請注意行車安全、減速慢行。",
+    "cmam_text": "[大雷雨即時訊息]您所在區域附近有劇烈雷雨或降雨發生，請注意防範，持續至12/08 06:00，氣象署Watch out for extremely heavy rain in area(s) nearby until Dec. 08, 06:00.CWA 02_2349_1234",
+    "cb_enabled": true,
+    "polygon": "25.08,121.78 25.06,121.79 25.06,121.76 25.08,121.76 25.08,121.78"
+}

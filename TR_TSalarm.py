@@ -508,6 +508,16 @@ plt.close(fig)
         # Send the POST request
         #r = requests.post(linemsg_url, headers=headers, data=data, files=imageFile)
 
+
+
+
+# 
+# 
+# 
+# 
+
+
+
 #內部參考:所有大雷雨即時訊息+QPF
 if tra_affected == True:
     linemsg_url = 'https://notify-api.line.me/api/notify'
@@ -532,6 +542,18 @@ if tra_affected == True:
         r = requests.post(linemsg_url, headers=headers, data=data, files=imageFile)
 # # ============================================================================
 linemsg_str = "\n\n" # Clear the message
+
+
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+
+
 
 linemsg_url = 'https://notify-api.line.me/api/notify'
 # token = 'HTOmJSTcJFSaL2RMpeue46WPMc31AuLS8Kz3oH8N0JM'
