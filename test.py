@@ -470,7 +470,7 @@ import os
 
 
 
-def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR, station_data):
+def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR):
     """
     繪製警報範圍地圖，並儲存圖片。
 
@@ -481,37 +481,42 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
     :param figdir: 圖片儲存目錄
     :param tt0: 警報時間
     :param ttR: 雷達回波時間
-    :param station_data: 車站資訊
     :return: 圖片儲存路徑
     """
-
     print("📌 正在繪製警報範圍地圖...")
 
-    fig, ax = plt.subplots(figsize=(8, 8))  # 調整地圖大小
+    # 建立圖表
+    fig, ax = plt.subplots(figsize=(8, 8))
 
     # 處理警報範圍座標
     wpoly_mod = np.array(wpoly)
     wpoly_mod[:, 0] = (wpoly_mod[:, 0] - 118) * 600
     wpoly_mod[:, 1] = 3600 - (wpoly_mod[:, 1] - 20.5) * 600
 
-    # 繪製雷達圖
-    ax.imshow(radar_image, alpha=0.55)  # 雷達影像
-    ax.imshow(rail_map_image, extent=[1800-480*1.69, 1800+480*1.69, 1800+640*1.6, 1800-640*1.785], alpha=0.8)  # 鐵路地圖
+    # 繪製雷達回波圖與鐵路地圖
+    ax.imshow(radar_image, alpha=0.55)
+    ax.imshow(rail_map_image, extent=[1800-480*1.69, 1800+480*1.69, 1800+640*1.6, 1800-640*1.785], alpha=0.8)
 
     # 繪製警報範圍多邊形
     poly = Polygon(wpoly_mod, closed=True, facecolor="red", alpha=0.3, edgecolor="darkred", linewidth=2)
     ax.add_patch(poly)
 
-    # 設定地圖顯示區域（顯示更廣範圍）
+    # 隱藏橫軸與豎軸的數字
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    # 設定地圖顯示範圍（以避免過度放大）
     min_x, max_x = np.min(wpoly_mod[:, 0]), np.max(wpoly_mod[:, 0])
     min_y, max_y = np.min(wpoly_mod[:, 1]), np.max(wpoly_mod[:, 1])
     mid_x, mid_y = (max_x + min_x) / 2, (max_y + min_y) / 2
-
-    # 增加顯示範圍，避免過度放大
-    radius = max((max_x - min_x), (max_y - min_y)) * 13  
-
+    radius = max((max_x - min_x), (max_y - min_y)) * 13
     ax.set_xlim(mid_x - radius, mid_x + radius)
     ax.set_ylim(mid_y + radius, mid_y - radius)
+
+    # 新增一個位於圖片下方的座標軸，顯示雷達色階圖例
+    cb_ax = fig.add_axes([0.25, 0.05, 0.5, 0.05])  # [left, bottom, width, height]，可依需求調整
+    cb_ax.imshow(radar_colorbar)
+    cb_ax.axis('off')
 
     # 儲存圖片
     output_path = f"{figdir}/TS{tt0.replace(':', '').replace(' ', '').replace('-', '')}_R{ttR.replace(':', '').replace(' ', '').replace('-', '')}.png"
@@ -520,6 +525,7 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
 
     print(f"✅ 地圖已儲存至: {output_path}")
     return output_path
+
 
 
 def send_line_notification(message, image_path, token):
@@ -590,7 +596,7 @@ def main():
     rail_map_image = Image.open(RAIL_MAP_IMAGE_FILE)
 
     # **✅ 修正：確保 `station_data` 正確傳遞**
-    output_image_path = plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR, station_data)
+    output_image_path = plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR)
 
     print(f"📂 圖片儲存路徑: {output_image_path}")
     print("✅ 系統執行完成！")
