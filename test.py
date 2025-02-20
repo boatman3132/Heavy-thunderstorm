@@ -63,6 +63,30 @@ BRANCH_LINES = np.array(["平溪線", "內灣線", "集集線", "深澳線", "�
 # =============================================================================
 # 輔助函式
 # =============================================================================
+
+def load_rail_map_image():
+    """
+    從 Taiwan_rail_map.svg 載入鐵路地圖影像，並轉換為 PIL Image 物件以便進行繪圖。
+    這樣在放大時可保有更高解析度的清晰度。
+    """
+    import io
+    try:
+        import cairosvg
+    except ImportError:
+        raise ImportError("需要安裝 cairosvg 模組以轉換 SVG 檔案，請執行：pip install cairosvg")
+    
+    # 定義 SVG 檔案的路徑（請確認 Taiwan_rail_map.svg 放置於 exfile 目錄中）
+    svg_path = os.path.join(EXFILE_DIR, "Taiwan_rail_map.svg")
+    
+    # 使用 cairosvg 將 SVG 轉換為 PNG 格式的二進位資料
+    png_data = cairosvg.svg2png(url=svg_path)
+    
+    # 透過 BytesIO 將二進位資料轉換為 PIL Image 物件
+    rail_map_image = Image.open(io.BytesIO(png_data))
+    
+    return rail_map_image
+
+
 def swap_columns(matrix, col1, col2):
     """
     將二維串列中指定的兩個欄位交換順序。
@@ -472,12 +496,12 @@ import os
 
 def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR):
     """
-    繪製警報範圍地圖，並儲存圖片。
-
+    繪製警報範圍地圖，將由 Taiwan_rail_map.svg 轉換後的底圖置於最下層，雷達回波圖疊在上方，並儲存圖片。
+    
     :param wpoly: 警報範圍多邊形座標
-    :param radar_image: 雷達回波影像
-    :param rail_map_image: 鐵路地圖影像
-    :param radar_colorbar: 雷達顏色條
+    :param radar_image: 雷達回波影像 (上層)
+    :param rail_map_image: 由 SVG 轉換後的鐵路地圖影像 (底層)
+    :param radar_colorbar: 雷達色階條
     :param figdir: 圖片儲存目錄
     :param tt0: 警報時間
     :param ttR: 雷達回波時間
@@ -493,9 +517,9 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
     wpoly_mod[:, 0] = (wpoly_mod[:, 0] - 118) * 600
     wpoly_mod[:, 1] = 3600 - (wpoly_mod[:, 1] - 20.5) * 600
 
-    # 繪製雷達回波圖與鐵路地圖
-    ax.imshow(radar_image, alpha=0.55)
+    # 先繪製底圖 (rail_map_image)，再疊加雷達回波圖 (radar_image)
     ax.imshow(rail_map_image, extent=[1800-480*1.69, 1800+480*1.69, 1800+640*1.6, 1800-640*1.785], alpha=0.8)
+    ax.imshow(radar_image, alpha=0.55)
 
     # 繪製警報範圍多邊形
     poly = Polygon(wpoly_mod, closed=True, facecolor="red", alpha=0.3, edgecolor="darkred", linewidth=2)
@@ -514,7 +538,7 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
     ax.set_ylim(mid_y + radius, mid_y - radius)
 
     # 新增一個位於圖片下方的座標軸，顯示雷達色階圖例
-    cb_ax = fig.add_axes([0.25, 0.05, 0.5, 0.05])  # [left, bottom, width, height]，可依需求調整
+    cb_ax = fig.add_axes([0.25, 0.05, 0.5, 0.05])
     cb_ax.imshow(radar_colorbar)
     cb_ax.axis('off')
 
@@ -525,7 +549,6 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
 
     print(f"✅ 地圖已儲存至: {output_path}")
     return output_path
-
 
 
 def send_line_notification(message, image_path, token):
@@ -593,7 +616,7 @@ def main():
 
     # 取得雷達圖
     radar_image, ttR, radar_colorbar = load_radar_data()
-    rail_map_image = Image.open(RAIL_MAP_IMAGE_FILE)
+    rail_map_image = load_rail_map_image()
 
     # **✅ 修正：確保 `station_data` 正確傳遞**
     output_image_path = plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR)
