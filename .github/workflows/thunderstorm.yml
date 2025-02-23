@@ -1,0 +1,23 @@
+name: Thunderstorm Alert
+
+on:
+  repository_dispatch:
+    types: [thunderstorm_alert]
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt  # 如果有需要安裝額外套件
+
+      - name: Run Python Script
+        run: python test.py  # 替換成你的 Python 檔案
