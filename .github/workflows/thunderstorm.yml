@@ -1,8 +1,7 @@
 name: Thunderstorm Alert
 
 on:
-  repository_dispatch:
-    types: [thunderstorm_alert]
+  workflow_dispatch:  # 🚨 這行一定要加！允許 API 手動觸發
 
 jobs:
   run-script:
