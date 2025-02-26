@@ -44,7 +44,6 @@ import pandas as pd
 # 全域參數設定 (使用相對路徑)
 # =============================================================================
 EXFILE_DIR = "./exfile"
-STATION_INFO_FILE = os.path.join(EXFILE_DIR, "station_info_UTF8.txt")
 # 警報記錄與輸出圖檔存放目錄
 ALARMFILE_DIR = "./TS_alarm"
 
@@ -367,10 +366,6 @@ def main():
     """
 
     print("🚀 啟動大雷雨警報系統...")
-
-    # 設定車站資訊檔案路徑
-    station_info_file = "station_info_UTF8.txt"  # 請確保這個檔案存在
-    station_grid_file = "grid_station_info_UTF8.txt"
 
 
     # 取得 CWA 警報資料
