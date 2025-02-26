@@ -48,7 +48,9 @@ STATION_INFO_FILE = os.path.join(EXFILE_DIR, "station_info_UTF8.txt")
 # 警報記錄與輸出圖檔存放目錄
 ALARMFILE_DIR = "./TS_alarm"
 
-
+# 字型檔案與此 Python 檔案位於同一個目錄下
+font_path = os.path.join(os.path.dirname(__file__), "STHeiti Medium.ttc")
+title_font = fm.FontProperties(fname=font_path, size=20)
 # =============================================================================
 # 輔助函式
 # =============================================================================
@@ -289,20 +291,11 @@ def load_radar_data():
     radar_colorbar = Image.fromarray(rgba_image_array)
     
     return radar_image, ttR, radar_colorbar
-
-
 def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR):
     """
-    繪製警報範圍地圖，將由 Taiwan_rail_map.svg 轉換後的底圖置於最下層，雷達回波圖疊在上方，並儲存圖片。
-    
-    :param wpoly: 警報範圍多邊形座標
-    :param radar_image: 雷達回波影像 (上層)
-    :param rail_map_image: 由 SVG 轉換後的鐵路地圖影像 (底層)
-    :param radar_colorbar: 雷達色階條
-    :param figdir: 圖片儲存目錄
-    :param tt0: 警報時間
-    :param ttR: 雷達回波時間
-    :return: 圖片儲存路徑
+    繪製警報範圍地圖，將由 Taiwan_rail_map.svg 轉換後的底圖置於最上層，
+    雷達回波圖疊在下方，並在圖片上方加入標題，格式類似於：
+    2024/12/07 21:02 大雷雨影響範圍
     """
     print("📌 正在繪製警報範圍地圖...")
 
@@ -314,15 +307,20 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
     wpoly_mod[:, 0] = (wpoly_mod[:, 0] - 118) * 600
     wpoly_mod[:, 1] = 3600 - (wpoly_mod[:, 1] - 20.5) * 600
 
-    # 先繪製底圖 (rail_map_image)，再疊加雷達回波圖 (radar_image)
-    ax.imshow(rail_map_image, extent=[1800-480*1.69, 1800+480*1.69, 1800+640*1.6, 1800-640*1.785], alpha=0.8)
-    ax.imshow(radar_image, alpha=0.55)
+    # 先繪製雷達回波圖 (放在較底層)
+    ax.imshow(radar_image, alpha=0.55, zorder=1)
+
+    # 再繪製鐵路地圖 (放在最上層)
+    ax.imshow(rail_map_image,
+              extent=[1800-480*1.69, 1800+480*1.69, 1800+640*1.6, 1800-640*1.785],
+              alpha=0.8,
+              zorder=2)
 
     # 繪製警報範圍多邊形
     poly = Polygon(wpoly_mod, closed=True, facecolor="red", alpha=0.3, edgecolor="darkred", linewidth=2)
     ax.add_patch(poly)
 
-    # 隱藏橫軸與豎軸的數字
+    # 隱藏橫軸與縱軸的數字
     ax.set_xticks([])
     ax.set_yticks([])
 
@@ -338,6 +336,16 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
     cb_ax = fig.add_axes([0.25, 0.05, 0.5, 0.05])
     cb_ax.imshow(radar_colorbar)
     cb_ax.axis('off')
+
+    # 使用 STHeiti Medium.ttc 字型設定標題
+    font_path = os.path.join(EXFILE_DIR, "STHeiti Medium.ttc")  # 確保字型檔案在 exfile 目錄下
+    title_font = fm.FontProperties(fname=font_path, size=24)  # 字體大小可依需求調整
+
+    # 將 tt0 格式轉換為 "YYYY/MM/DD HH:MM" 格式，並加上標題內容
+    tt0_date = tt0[:10].replace('-', '/')
+    tt0_time = tt0[11:16]
+    alert_title = f"{tt0_date} {tt0_time} 大雷雨影響範圍"
+    fig.suptitle(alert_title, fontproperties=title_font, y=0.95)
 
     # 儲存圖片
     output_path = f"{figdir}/TS{tt0.replace(':', '').replace(' ', '').replace('-', '')}_R{ttR.replace(':', '').replace(' ', '').replace('-', '')}.png"
