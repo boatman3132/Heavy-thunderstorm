@@ -56,11 +56,19 @@ title_font = fm.FontProperties(fname=font_path, size=20)
 
 
 
+# =============================================================================
+# =============================================================================
+# =============================================================================
 
 # API 設定 (請填入你的 Client ID)
 IMGUR_CLIENT_ID = "a11efbaec8642ad"
 LINE_ACCESS_TOKEN = "DS4xuDmTEm1JdSjB4nicpJSCWEFfkoK71AgNDslimzElHInP/irAjQ0RjeBzZuZ4kk3cZrOyQGYMMA5wnKoML0N+0L9SZSWt3Kuv+1e4QD4c9LuJahduzJ44VGu1wPbbKL6zBe9M7TiCA7nPzJqOxQdB04t89/1O/w1cDnyilFU="
 LINE_GROUP_ID = "C1744d43a6e011fb9e2819c43974ead95"
+
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
 
 def send_line_image(imgur_link):
     """
