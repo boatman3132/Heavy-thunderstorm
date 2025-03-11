@@ -343,41 +343,67 @@ def load_radar_data():
 
 def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR):
     """
-    繪製警報範圍地圖，確保警報範圍多邊形置中，並且上下左右各保留 200 像素的固定地圖範圍。
+    繪製警報範圍地圖：
+      - 根據警報多邊形轉換後的像素座標計算邊界與中心點
+      - 延伸邊界50像素，並確保左右與上下各至少200像素的顯示範圍
     """
     print("📌 正在繪製警報範圍地圖...")
 
     fig, ax = plt.subplots(figsize=(8, 8))
 
+    # 轉換警報範圍座標（單位：像素）
     wpoly_mod = np.array(wpoly)
     wpoly_mod[:, 0] = (wpoly_mod[:, 0] - 118) * 600
     wpoly_mod[:, 1] = 3600 - (wpoly_mod[:, 1] - 20.5) * 600
 
-    cx, cy = np.mean(wpoly_mod[:, 0]), np.mean(wpoly_mod[:, 1])
-    fixed_x_min, fixed_x_max = cx - 200, cx + 200
-    fixed_y_min, fixed_y_max = cy - 200, cy + 200
+    # 計算多邊形邊界與中心點
+    x_min, x_max = np.min(wpoly_mod[:, 0]), np.max(wpoly_mod[:, 0])
+    y_min, y_max = np.min(wpoly_mod[:, 1]), np.max(wpoly_mod[:, 1])
+    cx = (x_min + x_max) / 2
+    cy = (y_min + y_max) / 2
 
+    # 原始邊界延伸50像素後的半寬與半高
+    half_width = (x_max - x_min) / 2 + 50
+    half_height = (y_max - y_min) / 2 + 50
+
+    # 強制最小顯示範圍：左右與上下至少各200像素
+    half_width = max(half_width, 200)
+    half_height = max(half_height, 200)
+
+    fixed_x_min = cx - half_width
+    fixed_x_max = cx + half_width
+    fixed_y_min = cy - half_height
+    fixed_y_max = cy + half_height
+
+    # 繪製雷達回波圖 (底層)
     ax.imshow(radar_image, alpha=0.55, zorder=1)
 
+    # 繪製鐵路地圖 (上層)
     ax.imshow(rail_map_image,
               extent=[1800-480*1.69, 1800+480*1.69, 1800+640*1.6, 1800-640*1.785],
               alpha=0.8,
               zorder=2)
 
+    # 繪製警報範圍多邊形
+    from matplotlib.patches import Polygon
     poly = Polygon(wpoly_mod, closed=True, facecolor="red", alpha=0.3, edgecolor="darkred", linewidth=2)
     ax.add_patch(poly)
 
+    # 隱藏軸標
     ax.set_xticks([])
     ax.set_yticks([])
 
+    # 設定顯示範圍（注意Y軸需反轉）
     ax.set_xlim(fixed_x_min, fixed_x_max)
     ax.set_ylim(fixed_y_max, fixed_y_min)
 
+    # 新增雷達色階圖例
     cb_ax = fig.add_axes([0.25, 0.05, 0.5, 0.05])
     cb_ax.imshow(radar_colorbar)
     cb_ax.axis('off')
 
-    font_path = os.path.join(EXFILE_DIR, "STHeiti Medium.ttc")  
+    # 設定標題
+    font_path = os.path.join(EXFILE_DIR, "STHeiti Medium.ttc")
     title_font = fm.FontProperties(fname=font_path, size=24)
     tt0_date = tt0[:10].replace('-', '/')
     tt0_time = tt0[11:16]
@@ -391,11 +417,11 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
     print(f"✅ 地圖已儲存至: {output_path}")
 
     imgur_link = upload_to_imgur(output_path)
-
     if imgur_link:
         send_line_image(imgur_link)
 
     return output_path, imgur_link
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 新增的功能：檢查警報區域是否包含特定測站，並發送客製化 LINE 訊息
@@ -459,7 +485,7 @@ def main():
     station_df = load_stations(station_csv_path)
     if station_df is not None:
         affected_stations = check_stations_in_alarm(wpoly, station_df)
-        message_lines = ["⛈雷雨即時訊息:"]
+        message_lines = ["⛈大雷雨即時訊息:"]
         if affected_stations.empty:
             message_lines.append("影響鐵路區間：無")
         else:
