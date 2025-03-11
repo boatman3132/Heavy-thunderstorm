@@ -14,9 +14,10 @@ TR_TSalarm.py
     4. 依受影響狀況組合文字訊息（包含影響範圍、降雨量預報等）
     5. 讀取雷達回波圖、色階條與鐵路地圖，繪製受影響區域圖
     6. 發送 LINE Notify 訊息（附圖），區分對內與對外通知
-    
+    7. 【新增功能】若警報範圍包含特定測站，則發送客製化的文字訊息
+
 檔案路徑採用相對路徑，請將所有相關檔案置於同一資料夾或其子目錄中：
-    exfile/          ← 放置 station_info_UTF8.txt、grid_station_info_UTF8.txt、railway_region.txt、test-Photoroom.png、msjhbd.ttc 等
+    exfile/          ← 放置 station_info_UTF8.txt、station_info.csv、grid_station_info_UTF8.txt、railway_region.txt、Taiwan_rail_map.svg、msjhbd.ttc 等
     TS_alarm/        ← 警報記錄與輸出圖檔存放目錄
 
 注意:
@@ -39,7 +40,6 @@ import matplotlib.font_manager as fm
 from datetime import datetime, timedelta
 import pandas as pd
 
-
 # =============================================================================
 # 全域參數設定 (使用相對路徑)
 # =============================================================================
@@ -51,24 +51,42 @@ ALARMFILE_DIR = "./TS_alarm"
 font_path = os.path.join(os.path.dirname(__file__), "STHeiti Medium.ttc")
 title_font = fm.FontProperties(fname=font_path, size=20)
 # =============================================================================
-# 輔助函式
+# API 設定 (請填入你的 Client ID 與 LINE 權杖)
 # =============================================================================
-
-
-
-# =============================================================================
-# =============================================================================
-# =============================================================================
-
-# API 設定 (請填入你的 Client ID)
 IMGUR_CLIENT_ID = "a11efbaec8642ad"
 LINE_ACCESS_TOKEN = "DS4xuDmTEm1JdSjB4nicpJSCWEFfkoK71AgNDslimzElHInP/irAjQ0RjeBzZuZ4kk3cZrOyQGYMMA5wnKoML0N+0L9SZSWt3Kuv+1e4QD4c9LuJahduzJ44VGu1wPbbKL6zBe9M7TiCA7nPzJqOxQdB04t89/1O/w1cDnyilFU="
 LINE_GROUP_ID = "C1744d43a6e011fb9e2819c43974ead95"
 
 # =============================================================================
-# =============================================================================
+# 輔助函式
 # =============================================================================
 
+def send_line_message(message):
+    """
+    透過 LINE API 直接傳送文字訊息到指定的群組。
+    """
+    print("📩 正在傳送訊息到 LINE 群組...")
+
+    url = "https://api.line.me/v2/bot/message/push"
+    headers = {
+        "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "to": LINE_GROUP_ID,
+        "messages": [
+            {
+                "type": "text",
+                "text": message  # 傳送的訊息內容
+            }
+        ]
+    }
+    response = requests.post(url, headers=headers, json=payload)
+
+    if response.status_code == 200:
+        print("✅ 訊息已成功發送到 LINE 群組！")
+    else:
+        print(f"❌ 訊息發送失敗！錯誤訊息: {response.text}")
 
 def send_line_image(imgur_link):
     """
@@ -98,7 +116,6 @@ def send_line_image(imgur_link):
     else:
         print(f"❌ 圖片發送失敗！錯誤訊息: {response.text}")
 
-        
 def upload_to_imgur(image_path):
     """
     將生成的警報範圍圖片上傳到 Imgur，並回傳圖片 URL。
@@ -117,9 +134,6 @@ def upload_to_imgur(image_path):
     else:
         print("❌ 上傳失敗！", response.json())
         return None
-
-
-
 
 def load_rail_map_image():
     """
@@ -143,7 +157,6 @@ def load_rail_map_image():
     
     return rail_map_image
 
-
 def swap_columns(matrix, col1, col2):
     """
     將二維串列中指定的兩個欄位交換順序。
@@ -157,64 +170,51 @@ def swap_columns(matrix, col1, col2):
 def loadCWAQPF(poly, R1, R2):
     """
     取得中央氣象局 QPF 資料，並依據警報區域計算降雨百分位數。
-    
     :param poly: 警報影響區域的多邊形座標 (list of [lat, lon])
     :param R1: 目標百分位數 (例如 50)
     :param R2: 目標百分位數 (例如 95)
     :return: (time_str, QPF1, QPF2) -> 預報時間、QPF 50%、QPF 95%
     """
-
-    # 1. 下載 CWA QPF 資料
     url = 'https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/F-B0046-001?Authorization=rdec-key-123-45678-011121314&format=JSON'
     response = requests.get(url)
     data = response.json()
 
-    # 2. 解析 JSON 並轉換時間 (修正時區)
     content = data['cwaopendata']['dataset']['contents']['content']
     time_full = data['cwaopendata']['dataset']['datasetInfo']['parameterSet']['DateTime']
     time_str = (pd.to_datetime(time_full, utc=True) + pd.Timedelta(hours=8)).strftime('%H:%M')
 
-    # 3. 轉換 QPF 資料陣列
     c = np.fromstring(content, sep=',', dtype=float)
-    c[c < 0] = np.nan  # 將負值轉為 NaN
-    cc = c.reshape((561, 441))  # 確保形狀一致
+    c[c < 0] = np.nan
+    cc = c.reshape((561, 441))
 
-    # 4. 建立緯度、經度網格 (修正步長一致性)
     x = np.arange(118, 123.5 + 0.0125, 0.0125)
     y = np.arange(20, 27 + 0.0125, 0.0125)
     xx, yy = np.meshgrid(x, y)
 
-    # 5. 建立多邊形物件
     poly_obj = plt.Polygon(poly, closed=True)
     points = np.vstack((xx.ravel(), yy.ravel())).T
     path = Path(poly_obj.get_xy())
 
-    # 6. 確認點是否在多邊形內
     mask = path.contains_points(points).reshape(xx.shape)
 
-    # 7. 讀取鐵路區域資料並匹配 `mask` (修正形狀問題)
     all_railway = np.loadtxt("railway_region.txt", dtype=int)
-
-    # 確保 `mask` 與 `all_railway` 維度一致
     if mask.shape != all_railway.shape:
         min_shape = (min(mask.shape[0], all_railway.shape[0]), min(mask.shape[1], all_railway.shape[1]))
         mask = mask[:min_shape[0], :min_shape[1]]
         all_railway = all_railway[:min_shape[0], :min_shape[1]]
 
-    # 8. 計算 QPF 值
     affected_railway = all_railway * mask.astype(int)
     affected_railway_bool = affected_railway.astype(bool)
 
-    if np.all(np.isnan(cc)):  # 如果所有值皆為 NaN，回傳 -999
+    if np.all(np.isnan(cc)):
         QPF1, QPF2 = -999., -999.
-    elif not np.any(affected_railway_bool):  # 如果沒有影響臺鐵線路，則用多邊形內的降雨量
+    elif not np.any(affected_railway_bool):
         QPF1 = np.nanpercentile(cc[mask], R1)
         QPF2 = np.nanpercentile(cc[mask], R2)
-    else:  # 影響臺鐵線路的情況
+    else:
         QPF1 = np.nanpercentile(cc[affected_railway_bool], R1)
         QPF2 = np.nanpercentile(cc[affected_railway_bool], R2)
 
-    # 9. 四捨五入至 5 的倍數
     QPF1 = np.round(QPF1 / 5) * 5
     QPF2 = np.round(QPF2 / 5) * 5
 
@@ -227,20 +227,18 @@ def check_new_alarm(wr, alarmfile_dir):
     :param alarmfile_dir: 警報記錄存放目錄
     :return: (t_lst_str, alarm_id)
     """
-    # 將 UTC 時間轉為本地時間 (加 8 小時)
     t_str = datetime.strptime(str(wr[0]['effective']), "%Y-%m-%dT%H:%M:%SZ")
     t_local = t_str + timedelta(hours=8)
     t_lst_str = t_local.strftime("%Y%m%d")
     alarm_id = wr[0]['id']
     
-    # 建立存放警報記錄的目錄 (list/)
     alarmfile_list = os.path.join(alarmfile_dir, "list")
     if not os.path.exists(alarmfile_list):
         os.makedirs(alarmfile_list)
     checkfile_path = os.path.join(alarmfile_list, f"{t_lst_str}_{alarm_id}.json")
     
     if os.path.isfile(checkfile_path):
-        sys.exit("No new alarm!!!")  # 已有記錄則退出
+        sys.exit("No new alarm!!!")
     else:
         with open(checkfile_path, 'w', encoding='utf-8') as json_file:
             json.dump(wr[0], json_file, ensure_ascii=False, indent=4)
@@ -262,17 +260,13 @@ def prepare_output_directories(alarmfile_dir, t_lst_str):
         os.makedirs(figdir)
     return figdir
 
-
-
 def parse_polygon(polygon_str):
     """
     將警報資料中的 polygon 字串轉換為座標列表，並調整經緯度順序 (lat, lon)。
     :param polygon_str: 字串，格式如 "lon,lat lon,lat ..."
     :return: 座標列表，格式 [[lat, lon], ...]
     """
-    # 以空白分隔各點，再以逗號拆分數值
     wpoly = [list(map(float, point.split(','))) for point in polygon_str.split()]
-    # 原資料為 (lon, lat)，交換順序使其變成 (lat, lon)
     swap_columns(wpoly, 0, 1)
     return wpoly
 
@@ -280,16 +274,13 @@ def generate_time_strings(wr):
     """
     根據警報資料中的 effective 與 expires 欄位產生文字用時間字串。
     :param wr: 警報資料 (list)
-    :return: (tt0, tt1) 字串，分別代表警報生效時間與過期時間 (格式依需求調整)
+    :return: (tt0, tt1) 字串，分別代表警報生效時間與過期時間
     """
-    # effective 轉為本地時間 (加 8 小時)
     tt0 = (np.datetime64(wr[0]['effective']) + np.timedelta64(8, 'h')).astype(str)
     tt0 = tt0[:16].replace('T', ' ')
-    # expires 取時分
     tt1 = (np.datetime64(wr[0]['expires']) + np.timedelta64(8, 'h')).astype(str)
     tt1 = tt1[11:16]
     return tt0, tt1
-
 
 def determine_affected_stations(poly, grid_data, station_data):
     """
@@ -306,24 +297,19 @@ def determine_affected_stations(poly, grid_data, station_data):
     stationName_grid = grid_data["stationName_grid"]
     all_station_indices = []
     
-    # 先建立網格中是否位於多邊形內的布林陣列
     all_grid_contain = np.zeros(len(x_grid), dtype=bool)
     for i in range(len(x_grid)):
         if poly.contains_point((x_grid[i], y_grid[i])):
             all_grid_contain[i] = True
     
-    # 若某站點的名稱存在於網格資料中受影響的部分，視為該站受影響
     for i, name in enumerate(station_data["stationName"]):
         if name in stationName_grid[all_grid_contain]:
             all_station_indices.append(i)
     
-    # 檢查是否需要補加鄰近站 (加入相鄰站若尚未納入)
     extra_indices = []
     for idx in all_station_indices:
-        # 若前一站存在且同一線且未加入則補加
         if idx != 0 and station_data["lineName"][idx] == station_data["lineName"][idx-1] and (idx-1) not in all_station_indices:
             extra_indices.append(idx-1)
-        # 若後一站存在且同一線且未加入則補加
         if idx != len(station_data["stationName"]) - 1 and station_data["lineName"][idx] == station_data["lineName"][idx+1] and (idx+1) not in all_station_indices:
             extra_indices.append(idx+1)
     merged_list = list(set(all_station_indices + extra_indices))
@@ -335,7 +321,6 @@ def load_radar_data():
     從中央氣象局取得雷達回波圖與色階條，並處理色階條透明度調整。
     :return: (radar_image, ttR, radar_colorbar)
     """
-    # 取得雷達回波資料
     radar_url_api = 'https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/O-A0058-006?Authorization=rdec-key-123-45678-011121314&format=JSON'
     response = requests.get(radar_url_api)
     SR = response.json()
@@ -344,22 +329,17 @@ def load_radar_data():
     ttR = SR['cwaopendata']['dataset']['DateTime']
     ttR = ttR[:10] + ' ' + ttR[11:16]
     
-    # 取得雷達色階條
     radar_colorbar_url = 'https://www.cwa.gov.tw/V8/assets/img/radar/colorbar_n.png'
     radar_colorbar = Image.open(requests.get(radar_colorbar_url, stream=True).raw).convert("RGBA")
     radar_colorbar_array = np.array(radar_colorbar)
-    # 定義需要調整透明度的區域 (根據圖檔大小調整)
     x_start, y_start, x_end, y_end = 1, 1, 1124, 68
     alpha_mask = np.ones((radar_colorbar.height, radar_colorbar.width), dtype=np.float32)
-    alpha_mask[y_start:y_end, x_start:x_end] = 0.55  # 設定透明度 0.55
+    alpha_mask[y_start:y_end, x_start:x_end] = 0.55
     alpha_layer = (alpha_mask * 255).astype(np.uint8)
     rgba_image_array = np.dstack((radar_colorbar_array[:, :, :3], alpha_layer))
     radar_colorbar = Image.fromarray(rgba_image_array)
     
     return radar_image, ttR, radar_colorbar
-
-
-
 
 def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR):
     """
@@ -367,48 +347,36 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
     """
     print("📌 正在繪製警報範圍地圖...")
 
-    # 建立圖表
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    # 轉換警報範圍座標（單位：像素）
     wpoly_mod = np.array(wpoly)
     wpoly_mod[:, 0] = (wpoly_mod[:, 0] - 118) * 600
-    wpoly_mod[:, 1] = 3600 - (wpoly_mod[:, 1] - 20.5) * 600  # Y 軸翻轉以符合圖像
+    wpoly_mod[:, 1] = 3600 - (wpoly_mod[:, 1] - 20.5) * 600
 
-    # **計算警報範圍的中心點**
     cx, cy = np.mean(wpoly_mod[:, 0]), np.mean(wpoly_mod[:, 1])
-
-    # **設定固定範圍 (中心點 ± 200 像素)**
     fixed_x_min, fixed_x_max = cx - 200, cx + 200
     fixed_y_min, fixed_y_max = cy - 200, cy + 200
 
-    # 繪製雷達回波圖 (底層)
     ax.imshow(radar_image, alpha=0.55, zorder=1)
 
-    # 繪製鐵路地圖 (上層)
     ax.imshow(rail_map_image,
               extent=[1800-480*1.69, 1800+480*1.69, 1800+640*1.6, 1800-640*1.785],
               alpha=0.8,
               zorder=2)
 
-    # 繪製警報範圍多邊形
     poly = Polygon(wpoly_mod, closed=True, facecolor="red", alpha=0.3, edgecolor="darkred", linewidth=2)
     ax.add_patch(poly)
 
-    # 隱藏橫軸與縱軸的數字
     ax.set_xticks([])
     ax.set_yticks([])
 
-    # **設定固定顯示範圍**
     ax.set_xlim(fixed_x_min, fixed_x_max)
-    ax.set_ylim(fixed_y_max, fixed_y_min)  # Y 軸反向
+    ax.set_ylim(fixed_y_max, fixed_y_min)
 
-    # **新增雷達色階圖例**
     cb_ax = fig.add_axes([0.25, 0.05, 0.5, 0.05])
     cb_ax.imshow(radar_colorbar)
     cb_ax.axis('off')
 
-    # **設定標題**
     font_path = os.path.join(EXFILE_DIR, "STHeiti Medium.ttc")  
     title_font = fm.FontProperties(fname=font_path, size=24)
     tt0_date = tt0[:10].replace('-', '/')
@@ -416,27 +384,53 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
     alert_title = f"{tt0_date} {tt0_time} 大雷雨影響範圍"
     fig.suptitle(alert_title, fontproperties=title_font, y=0.95)
 
-    # 儲存圖片
     output_path = f"{figdir}/TS{tt0.replace(':', '').replace(' ', '').replace('-', '')}_R{ttR.replace(':', '').replace(' ', '').replace('-', '')}.png"
     plt.savefig(output_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
 
     print(f"✅ 地圖已儲存至: {output_path}")
 
-    # **上傳到 Imgur**
     imgur_link = upload_to_imgur(output_path)
 
-    # **透過 LINE API 發送圖片**
     if imgur_link:
         send_line_image(imgur_link)
 
     return output_path, imgur_link
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 新增的功能：檢查警報區域是否包含特定測站，並發送客製化 LINE 訊息
+# ─────────────────────────────────────────────────────────────────────────────
 
+def load_stations(csv_path):
+    """
+    讀取監測站資訊 CSV 檔案並回傳 DataFrame。
+    """
+    if not os.path.exists(csv_path):
+        print(f"❌ 找不到監測站 CSV 檔案: {csv_path}")
+        return None
+    try:
+        df = pd.read_csv(csv_path)
+        return df
+    except Exception as e:
+        print(f"❌ 讀取 CSV 檔案錯誤: {e}")
+        return None
 
-
-
-
+def check_stations_in_alarm(polygon, station_df):
+    """
+    檢查監測站是否位於大雷雨警報範圍內，回傳受影響站點的 DataFrame。
+    :param polygon: 多邊形座標 (格式 [[lat, lon], ...])
+    :param station_df: 監測站資料的 DataFrame，須包含 'Lat', 'Lon', 'lineName', 'staMil', 'stationName' 欄位
+    """
+    poly_path = Path(polygon)
+    affected_rows = []
+    for _, row in station_df.iterrows():
+        station_lon = row["Lat"]
+        station_lat = row["Lon"]
+        if poly_path.contains_point((station_lat, station_lon)):
+            affected_rows.append(row)
+    if not affected_rows:
+        return pd.DataFrame()
+    return pd.DataFrame(affected_rows)
 
 # =============================================================================
 # 主流程
@@ -444,33 +438,53 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
 
 def main():
     """
-    主要流程，不發送 LINE 訊息，而是將所有需要傳送的訊息記錄在本地終端與 log 檔案。
+    主要流程：包含獲取警報資料、檢查是否有新警報、解析警報範圍、
+    繪製警報地圖、發送圖檔通知，及【新增功能】檢查特定測站狀態並發送客製化訊息。
     """
-
     print("🚀 啟動大雷雨警報系統...")
 
-
-    # 取得 CWA 警報資料
     cwa_url = 'https://cbph.cwa.gov.tw/api/cells/?order=asc&offset=0&limit=20'
     response = requests.get(cwa_url)
     wr = response.json()
 
-    # 檢查是否為新警報
     t_lst_str, alarm_id = check_new_alarm(wr, ALARMFILE_DIR)
     figdir = prepare_output_directories(ALARMFILE_DIR, t_lst_str)
 
-
-    # 解析警報範圍
+    # 解析警報範圍（將原始 polygon 轉換為 [lat, lon] 格式）
     wpoly = parse_polygon(wr[0]['polygon'])
     tt0, tt1 = generate_time_strings(wr)
 
-    # 取得雷達圖
+    # ──【新增功能】檢查警報區域是否包含特定測站，並發送客製化 LINE 訊息
+    station_csv_path = os.path.join(EXFILE_DIR, "station_info.csv")
+    station_df = load_stations(station_csv_path)
+    if station_df is not None:
+        affected_stations = check_stations_in_alarm(wpoly, station_df)
+        message_lines = ["⛈雷雨即時訊息:"]
+        if affected_stations.empty:
+            message_lines.append("影響鐵路區間：無")
+        else:
+            # 根據 lineName 分組，並依 staMil 排序後取第一站與最後一站
+            grouped = affected_stations.groupby("lineName")
+            for line, group in grouped:
+                group = group.copy()
+                group["staMil"] = group["staMil"].astype(float)
+                group = group.sort_values("staMil")
+                first_station = group.iloc[0]["stationName"]
+                last_station = group.iloc[-1]["stationName"]
+                message_lines.append(f"影響鐵路區間：{line} ({first_station}-{last_station})")
+        description = wr[0].get("description", "")
+        if description:
+            message_lines.append(description)
+        custom_message = "\n".join(message_lines)
+        send_line_message(custom_message)
+    else:
+        print("❌ 未能讀取監測站資料，跳過客製化訊息發送。")
+
+    # 後續流程：取得雷達圖、鐵路地圖、繪製警報地圖與發送圖檔
     radar_image, ttR, radar_colorbar = load_radar_data()
     rail_map_image = load_rail_map_image()
 
-    # **✅ 修正：確保 `station_data` 正確傳遞**
-    output_image_path = plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR)
-
+    output_image_path, _ = plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR)
     print(f"📂 圖片儲存路徑: {output_image_path}")
     print("✅ 系統執行完成！")
 
