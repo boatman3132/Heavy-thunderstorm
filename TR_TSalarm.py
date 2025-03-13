@@ -229,9 +229,16 @@ def loadCWAQPF(poly, R1, R2):
     else:
         QPF1 = np.nanpercentile(cc[affected_railway_bool], R1)
         QPF2 = np.nanpercentile(cc[affected_railway_bool], R2)
+    if np.isnan(QPF1):
+        QPF1 = 0
+    else:
+        QPF1 = int(np.round(QPF1 / 5) * 5)
 
-    QPF1 = int(np.round(QPF1 / 5) * 5)
-    QPF2 = int(np.round(QPF2 / 5) * 5)
+    if np.isnan(QPF2):
+        QPF2 = 0
+    else:
+        QPF2 = int(np.round(QPF2 / 5) * 5)
+
 
     return time_str, QPF1, QPF2
 
@@ -361,7 +368,7 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
     """
     繪製警報範圍地圖，修改內容：
       - 傳送出去的圖片地圖始終保持正方形
-      - 警報區域多邊形的邊框線條改為紫色
+      - 警報區域多邊形的邊框線條改為紫色，且位於最上層，同時降低透明度
     """
     print("📌 正在繪製警報範圍地圖...")
 
@@ -400,8 +407,11 @@ def plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, t
               alpha=0.8,
               zorder=2)
 
-    # 繪製警報範圍多邊形，將邊框顏色改為紫色
-    poly = Polygon(wpoly_mod, closed=True, facecolor="#9e0bf8", alpha=0.3, edgecolor="#9e0bf8", linewidth=2)
+    # 繪製警報範圍多邊形：
+    # 將邊框顏色改為紫色，設定 zorder=3 使其位於最上層，
+    # 並將 alpha 由 0.3 調整為 0.6 以降低透明度，使外框更明顯
+    poly = Polygon(wpoly_mod, closed=True, facecolor="#9e0bf8", alpha=0.4, 
+                   edgecolor="#9e0bf8", linewidth=3, zorder=3)
     ax.add_patch(poly)
 
     # 隱藏座標軸標籤
@@ -449,24 +459,43 @@ def generate_line_affected_message(affected_stations, station_df):
     例如：若雷雨區域為「八堵」到「百福」，而完整資料中「八堵」前一站為「三坑」、
           「百福」後一站為「五堵」，則訊息會顯示為：
           西部幹線 (三坑-五堵)
+          
+    如果 lineName 為支線（平溪線、集集線、內灣線、深奧線、沙崙線、六家線、成追線），
+    則只顯示支線名稱（非全線時）。
+    
+    若受影響站點涵蓋該線所有車站，則不顯示車站區間，改用「（全線）」，
+    例如：集集線（全線）。
     """
     message_lines = []
     grouped = affected_stations.groupby("lineName")
     message_lines.append("\n影響鐵路區間：")
     
+    # 定義支線清單
+    branch_lines = ["平溪線", "集集線", "內灣線", "深奧線", "沙崙線", "六家線", "成追線"]
+    
     for line, group in grouped:
         group = group.copy()
         group["staMil"] = group["staMil"].astype(float)
         group = group.sort_values("staMil")
-        # 取得受影響站點的站名集合
         affected_names = set(group["stationName"])
         
         # 取得完整該線站點資料，並依 staMil 排序
         full_line = station_df[station_df["lineName"] == line].copy()
         full_line["staMil"] = full_line["staMil"].astype(float)
         full_line = full_line.sort_values("staMil").reset_index(drop=True)
+        full_station_names = set(full_line["stationName"])
         
-        # 找出 full_line 中屬於受影響區域的站點索引
+        # 如果受影響車站包含所有車站，則輸出「（全線）」
+        if affected_names == full_station_names:
+            message_lines.append(f"{line}（全線）")
+            continue
+        
+        # 如果屬於支線，則只顯示線名
+        if line in branch_lines:
+            message_lines.append(f"{line}")
+            continue
+        
+        # 取得 full_line 中屬於受影響區域的站點索引
         affected_indices = [i for i, row in full_line.iterrows() if row["stationName"] in affected_names]
         if not affected_indices:
             # 若找不到對應站點，則直接使用受影響區域首尾站名
@@ -476,19 +505,19 @@ def generate_line_affected_message(affected_stations, station_df):
             first_index = min(affected_indices)
             last_index = max(affected_indices)
             # 若有前一站則取前一站，否則仍使用受影響區域第一站
-            if first_index > 0:
-                pre_station = full_line.iloc[first_index - 1]["stationName"]
+            if first_index > 1:
+                pre_station = full_line.iloc[first_index - 2]["stationName"]
             else:
                 pre_station = full_line.iloc[first_index]["stationName"]
             # 若有下一站則取下一站，否則仍使用受影響區域最後一站
-            if last_index < len(full_line) - 1:
-                post_station = full_line.iloc[last_index + 1]["stationName"]
+            if last_index < len(full_line) - 2:
+                post_station = full_line.iloc[last_index + 2]["stationName"]
             else:
                 post_station = full_line.iloc[last_index]["stationName"]
         
         message_lines.append(f"{line} ({pre_station}-{post_station})")
-    
     return message_lines
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -567,7 +596,17 @@ def main():
         message_lines.append(f"{time_str}起一小時內受影響路段降雨量可能達 {QPF1}~{QPF2} mm")
 
         message_lines.append("")
+
         description = wr[0].get("description", "")
+        parts = description.split("；")
+        if len(parts) > 1:
+            sub_parts = parts[1].split("，")
+            description = parts[0] + "；" + sub_parts[0]
+        else:
+            description = parts[0]
+
+
+
         if description:
             message_lines.append(description)
         custom_message = "\n".join(message_lines)
