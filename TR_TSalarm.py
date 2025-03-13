@@ -588,12 +588,6 @@ def main():
             message_lines.append("影響鐵路區間：無")
         else:
             message_lines += generate_line_affected_message(affected_stations, station_df)
-        
-        
-        time_str, QPF1, QPF2 = loadCWAQPF(wpoly, R1, R2)
-
-        message_lines.append("")
-        message_lines.append(f"{time_str}起一小時內受影響路段降雨量可能達 {QPF1}~{QPF2} mm")
 
         message_lines.append("")
 
@@ -614,6 +608,11 @@ def main():
     else:
         print("❌ 未能讀取監測站資料，跳過客製化訊息發送。")
 
+    time_str, QPF1, QPF2 = loadCWAQPF(wpoly, R1, R2)
+
+    message_lines.append("")
+    message_lines.append(f"{time_str}起一小時內受影響路段降雨量可能達 {QPF1}~{QPF2} mm")
+
 
 
     # 後續流程：取得雷達圖、鐵路地圖、繪製警報地圖與發送圖檔
@@ -623,6 +622,7 @@ def main():
     output_image_path, _ = plot_alarm_map(wpoly, radar_image, rail_map_image, radar_colorbar, figdir, tt0, ttR)
     print(f"📂 圖片儲存路徑: {output_image_path}")
     print("✅ 系統執行完成！")
+
 
 if __name__ == '__main__':
     main()
