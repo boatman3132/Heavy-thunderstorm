@@ -68,7 +68,7 @@ R2 = 95  # 95% 百分位數（極端降雨量）
 # LINE_ACCESS_TOKEN = "DS4xuDmTEm1JdSjB4nicpJSCWEFfkoK71AgNDslimzElHInP/irAjQ0RjeBzZuZ4kk3cZrOyQGYMMA5wnKoML0N+0L9SZSWt3Kuv+1e4QD4c9LuJahduzJ44VGu1wPbbKL6zBe9M7TiCA7nPzJqOxQdB04t89/1O/w1cDnyilFU="
 # LINE_GROUP_ID = "C1744d43a6e011fb9e2819c43974ead95"
 # =============================================================================
-IMGUR_CLIENT_ID = "a11efbaec8642ad"
+IMGUR_CLIENT_ID = "b75be862b3b9dff"
 LINE_ACCESS_TOKEN = "gxZCUYQVNrAKg4Gznl/5yfLrtzZWPzFYIxHdOESot+JWyHwEtbxMLQ+3BgTAB00zdwmWsJrRY9lEWXEqVgGWz66BJwji9LnID7OCHRpGH7mIUptuWXXHkIoH3ZDffCgth2op/qRR9In2NESdwYbAzAdB04t89/1O/w1cDnyilFU="
 LINE_GROUP_ID = "C8d6211c263ee4842704b392d45f952ee"
 
@@ -603,15 +603,18 @@ def main():
 
         if description:
             message_lines.append(description)
+
+
+        time_str, QPF1, QPF2 = loadCWAQPF(wpoly, R1, R2)
+
+        message_lines.append("")
+        message_lines.append(f"{time_str}起一小時內受影響路段降雨量可能達 {QPF1}~{QPF2} mm")
+
         custom_message = "\n".join(message_lines)
         send_line_message(custom_message)
     else:
         print("❌ 未能讀取監測站資料，跳過客製化訊息發送。")
 
-    time_str, QPF1, QPF2 = loadCWAQPF(wpoly, R1, R2)
-
-    message_lines.append("")
-    message_lines.append(f"{time_str}起一小時內受影響路段降雨量可能達 {QPF1}~{QPF2} mm")
 
 
 
